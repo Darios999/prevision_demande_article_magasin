@@ -6,29 +6,25 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 
-# ============================================================
 # 1. CHEMIN DU PROJET
-# ============================================================
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 MODEL_PATH = BASE_DIR / "models" / "modele_demande_random_forest.joblib"
 
 
-# ============================================================
-# 2. CHARGEMENT DU MODÈLE
-# ============================================================
+# 2. CHARGEMENT DU MODÈLE (OPTIMISÉ POUR LA RAM)
 
 try:
-    model = joblib.load(MODEL_PATH)
+    # mmap_mode='r' évite de charger tout le modèle en mémoire d'un coup
+    model = joblib.load(MODEL_PATH, mmap_mode='r')
 except Exception as erreur:
     model = None
     print("Erreur lors du chargement du modèle :", erreur)
 
 
-# ============================================================
 # 3. CRÉATION DE L'APPLICATION FASTAPI
-# ============================================================
 
 app = FastAPI(
     title="API de prévision de la demande",
@@ -40,9 +36,8 @@ app = FastAPI(
 )
 
 
-# ============================================================
+
 # 4. STRUCTURE DES DONNÉES REÇUES
-# ============================================================
 
 class DonneesPrediction(BaseModel):
     store: int
@@ -51,9 +46,8 @@ class DonneesPrediction(BaseModel):
     historique_ventes: list[float]
 
 
-# ============================================================
+
 # 5. PAGE D'ACCUEIL
-# ============================================================
 
 @app.get("/")
 def accueil():
@@ -64,7 +58,6 @@ def accueil():
     }
 
 
-# ============================================================
 # 6. VÉRIFICATION DE L'API
 # ============================================================
 
@@ -82,7 +75,6 @@ def health():
     }
 
 
-# ============================================================
 # 7. CRÉATION DES VARIABLES DU MODÈLE
 # ============================================================
 
