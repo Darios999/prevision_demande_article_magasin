@@ -6,25 +6,23 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 
-# 1. CHEMIN DU PROJET
-
+# Chemin du projet
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 MODEL_PATH = BASE_DIR / "models" / "modele_demande_random_forest.joblib"
 
 
-# 2. CHARGEMENT DU MODÈLE (OPTIMISÉ POUR LA RAM)
+# Chargement du modèle
 
 try:
-    # mmap_mode='r' évite de charger tout le modèle en mémoire d'un coup
-    model = joblib.load(MODEL_PATH, mmap_mode='r')
+    model = joblib.load(MODEL_PATH, mmap_mode="r")
 except Exception as erreur:
     model = None
     print("Erreur lors du chargement du modèle :", erreur)
 
 
-# 3. CRÉATION DE L'APPLICATION FASTAPI
+# Création de l'application FastAPI
 
 app = FastAPI(
     title="API de prévision de la demande",
@@ -36,8 +34,7 @@ app = FastAPI(
 )
 
 
-
-# 4. STRUCTURE DES DONNÉES REÇUES
+# Structure des données reçues
 
 class DonneesPrediction(BaseModel):
     store: int
@@ -46,8 +43,7 @@ class DonneesPrediction(BaseModel):
     historique_ventes: list[float]
 
 
-
-# 5. PAGE D'ACCUEIL
+# Page d'accueil
 
 @app.get("/")
 def accueil():
@@ -58,8 +54,7 @@ def accueil():
     }
 
 
-# 6. VÉRIFICATION DE L'API
-# ============================================================
+# Vérification de l'API
 
 @app.get("/health")
 def health():
@@ -75,8 +70,7 @@ def health():
     }
 
 
-# 7. CRÉATION DES VARIABLES DU MODÈLE
-# ============================================================
+# Création des variables du modèle
 
 def creer_variables(
     store: int,
@@ -85,17 +79,43 @@ def creer_variables(
     historique_ventes: list[float]
 ):
 
+    # Vérification du magasin
+
+    if store < 1 or store > 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Le magasin doit être compris entre 1 et 10."
+        )
+
+    # Vérification de l'article
+
+    if item < 1 or item > 50:
+        raise HTTPException(
+            status_code=400,
+            detail="L'article doit être compris entre 1 et 50."
+        )
+
     # Vérification de l'historique
+
     if len(historique_ventes) < 30:
         raise HTTPException(
             status_code=400,
             detail=(
                 "L'historique doit contenir au moins "
-                "30 valeurs de ventes."
+                "30 jours de ventes."
             )
         )
 
+    # Vérification des valeurs de ventes
+
+    if any(vente < 0 for vente in historique_ventes):
+        raise HTTPException(
+            status_code=400,
+            detail="Les valeurs de ventes ne peuvent pas être négatives."
+        )
+
     # Conversion de la date
+
     try:
         date = pd.to_datetime(date_prevision)
     except Exception:
@@ -104,10 +124,12 @@ def creer_variables(
             detail="La date doit être au format YYYY-MM-DD."
         )
 
-    # Les ventes doivent être dans l'ordre chronologique
+    # Conversion de l'historique en série pandas
+
     ventes = pd.Series(historique_ventes, dtype=float)
 
     # Création des variables
+
     variables = {
         "store": store,
         "item": item,
@@ -117,12 +139,10 @@ def creer_variables(
         "day_of_week": date.dayofweek,
         "week": int(date.isocalendar().week),
 
-        # Dernières ventes
         "sales_lag_1": ventes.iloc[-1],
         "sales_lag_7": ventes.iloc[-7],
         "sales_lag_14": ventes.iloc[-14],
 
-        # Moyennes mobiles
         "rolling_mean_7": ventes.iloc[-7:].mean(),
         "rolling_mean_14": ventes.iloc[-14:].mean(),
         "rolling_mean_30": ventes.iloc[-30:].mean()
@@ -131,9 +151,7 @@ def creer_variables(
     return pd.DataFrame([variables])
 
 
-# ============================================================
-# 8. PRÉDICTION
-# ============================================================
+# Prédiction
 
 @app.post("/predict")
 def predire(donnees: DonneesPrediction):
@@ -144,7 +162,8 @@ def predire(donnees: DonneesPrediction):
             detail="Le modèle n'est pas disponible."
         )
 
-    # Création des 13 variables
+    # Création des variables
+
     donnees_modele = creer_variables(
         store=donnees.store,
         item=donnees.item,
@@ -152,7 +171,8 @@ def predire(donnees: DonneesPrediction):
         historique_ventes=donnees.historique_ventes
     )
 
-    # Ordre exact des variables utilisées pendant l'entraînement
+    # Variables utilisées pendant l'entraînement
+
     features = [
         "store",
         "item",
@@ -169,13 +189,16 @@ def predire(donnees: DonneesPrediction):
         "rolling_mean_30"
     ]
 
-    # Vérification
+    # Vérification de l'ordre des variables
+
     donnees_modele = donnees_modele[features]
 
     # Prédiction
+
     prediction = model.predict(donnees_modele)[0]
 
     # Une demande négative n'a pas de sens
+
     prediction = max(0, prediction)
 
     return {

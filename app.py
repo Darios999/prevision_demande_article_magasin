@@ -1,316 +1,367 @@
 import streamlit as st
 import requests
-from datetime import date
 
-# 1. CONFIGURATION DE LA PAGE
+
+# Configuration de la page
 
 st.set_page_config(
     page_title="Prévision de la demande",
-    page_icon="📈",
-    layout="wide"
-)
-
-# 2. CONFIGURATION DE L'API
-
-API_URL = "http://127.0.0.1:8000"
-
-
-# 3. TITRE DE L'APPLICATION
-
-st.title("📈 Prévision de la demande")
-
-st.write(
-    """
-    Cette application permet de prévoir la demande future d'un article
-    à partir de son historique récent de ventes.
-    
-    Les données saisies sont transmises à une API FastAPI qui utilise
-    un modèle de Machine Learning pour effectuer la prévision.
-    """
-)
-
-st.divider()
-
-# 4. INFORMATIONS DU PRODUIT
-
-st.subheader("Informations du produit")
-
-colonne1, colonne2 = st.columns(2)
-
-with colonne1:
-    magasin = st.number_input(
-        "Identifiant du magasin",
-        min_value=1,
-        step=1,
-        value=1,
-        help="Entrez l'identifiant numérique du magasin."
-    )
-
-with colonne2:
-    article = st.number_input(
-        "Identifiant de l'article",
-        min_value=1,
-        step=1,
-        value=1,
-        help="Entrez l'identifiant numérique de l'article."
-    )
-
-# 5. DATE DE PRÉVISION
-
-st.subheader("📅 Date de prévision")
-
-date_prevision = st.date_input(
-    "Sélectionnez la date à prévoir",
-    value=date.today(),
-    min_value=date.today(),
-    help="Choisissez la date pour laquelle vous souhaitez prévoir la demande."
-)
-
-# 6. HISTORIQUE DES VENTES
-
-st.subheader("Historique récent des ventes")
-
-st.info(
-    """
-    **Important :** saisissez au minimum les 30 dernières ventes.
-    
-    Les valeurs doivent être renseignées **de la plus ancienne à la plus récente**.
-    Par exemple, la dernière valeur correspond à la vente la plus récente.
-    """
+    page_icon=None,
+    layout="centered"
 )
 
 
-# Zone de saisie
-historique_texte = st.text_area(
-    "Ventes historiques",
-    placeholder=(
-        "Exemple :\n"
-        "18, 21, 20, 24, 19, 25, 27, 22, 23, 26, "
-        "24, 28, 30, 27, 25, 29, 31, 30, 28, 32, "
-        "33, 29, 31, 35, 34, 36, 33, 37, 39, 40"
-    ),
-    height=180,
-    help=(
-        "Séparez les valeurs par des virgules. "
-        "Vous pouvez fournir plus de 30 valeurs."
-    )
-)
+# Style de l'interface
 
-# 7. FONCTION DE VALIDATION
-
-def verifier_historique(texte):
+st.markdown(
     """
-    Transforme le texte saisi en liste de ventes
-    et vérifie que les valeurs sont valides.
-    """
+    <style>
 
-    if not texte.strip():
-        return None, "Veuillez saisir l'historique des ventes."
-
-    try:
-        valeurs = texte.replace(";", ",").split(",")
-
-        ventes = []
-
-        for valeur in valeurs:
-
-            valeur = valeur.strip()
-
-            if valeur == "":
-                continue
-
-            nombre = float(valeur)
-
-            if nombre < 0:
-                return (
-                    None,
-                    "Les ventes ne peuvent pas être négatives."
-                )
-
-            ventes.append(nombre)
-
-    except ValueError:
-        return (
-            None,
-            "Certaines valeurs ne sont pas numériques. "
-            "Utilisez uniquement des nombres séparés par des virgules."
-        )
-
-    if len(ventes) < 30:
-        return (
-            None,
-            f"Vous avez saisi {len(ventes)} valeur(s). "
-            "L'API nécessite au minimum 30 valeurs."
-        )
-
-    return ventes, None
-
-# 8. BOUTON DE PRÉVISION
-
-st.divider()
-
-lancer_prediction = st.button(
-    "🔮 Lancer la prévision",
-    type="primary",
-    use_container_width=True
-)
-
-# 9. TRAITEMENT DE LA PRÉVISION
-
-if lancer_prediction:
-
-    # Validation de l'historique
-
-    historique, erreur = verifier_historique(historique_texte)
-
-    if erreur:
-        st.error(erreur)
-        st.stop()
-
-    # Préparation des données
-
-    donnees = {
-        "store": int(magasin),
-        "item": int(article),
-        "date_prevision": date_prevision.strftime("%Y-%m-%d"),
-        "historique_ventes": historique
+    .main {
+        max-width: 900px;
+        margin: auto;
     }
 
-    # Appel de l'API FastAPI
+    .header {
+        padding: 25px 30px;
+        border-radius: 12px;
+        background-color: #f5f7fa;
+        border: 1px solid #e1e5ea;
+        margin-bottom: 25px;
+    }
 
-    with st.spinner("Calcul de la prévision en cours"):
+    .header h1 {
+        margin-bottom: 8px;
+        font-size: 30px;
+    }
 
-        try:
+    .header p {
+        margin-bottom: 0;
+        color: #5f6368;
+        font-size: 16px;
+    }
 
-            reponse = requests.post(
-                f"{API_URL}/predict",
-                json=donnees,
-                timeout=30
-            )
+    .section-title {
+        font-size: 20px;
+        font-weight: 600;
+        margin-top: 25px;
+        margin-bottom: 15px;
+    }
+
+    .info-box {
+        padding: 15px 18px;
+        border-radius: 8px;
+        background-color: #f8f9fa;
+        border: 1px solid #e1e5ea;
+        margin: 15px 0;
+        color: #4a4a4a;
+    }
+
+    .result-box {
+        padding: 25px;
+        border-radius: 12px;
+        background-color: #f5f7fa;
+        border: 1px solid #d9dee5;
+        text-align: center;
+        margin-top: 25px;
+    }
+
+    .result-title {
+        font-size: 15px;
+        color: #5f6368;
+        margin-bottom: 8px;
+    }
+
+    .result-value {
+        font-size: 36px;
+        font-weight: 700;
+        margin-bottom: 12px;
+    }
+
+    .result-details {
+        color: #5f6368;
+        font-size: 14px;
+    }
+
+    div.stButton > button {
+        width: 100%;
+        border-radius: 8px;
+        height: 48px;
+        font-size: 16px;
+        font-weight: 600;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 
-        except requests.exceptions.ConnectionError:
+# En-tête
+
+st.markdown(
+    """
+    <div class="header">
+        <h1>Prévision de la demande</h1>
+        <p>
+            Application de prévision des ventes d'articles
+            à partir de l'historique des ventes.
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# Paramètres de la prévision
+
+st.markdown(
+    '<div class="section-title">Paramètres de la prévision</div>',
+    unsafe_allow_html=True
+)
+
+col1, col2 = st.columns(2)
+
+
+with col1:
+
+    store = st.number_input(
+        "Identifiant du magasin",
+        min_value=1,
+        max_value=10,
+        value=1,
+        step=1,
+        help=(
+            "Les magasins disponibles dans le modèle "
+            "sont numérotés de 1 à 10."
+        )
+    )
+
+    item = st.number_input(
+        "Identifiant de l'article",
+        min_value=1,
+        max_value=50,
+        value=10,
+        step=1,
+        help=(
+            "Les articles disponibles dans le modèle "
+            "sont numérotés de 1 à 50."
+        )
+    )
+
+
+with col2:
+
+    date_prevision = st.date_input(
+        "Date de prévision"
+    )
+
+
+# Informations
+
+st.markdown(
+    """
+    <div class="info-box">
+        <strong>Informations sur les données</strong><br><br>
+        Le modèle a été entraîné avec 10 magasins
+        et 50 articles.<br>
+        Les identifiants acceptés sont donc :
+        magasins de 1 à 10 et articles de 1 à 50.
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# Historique des ventes
+
+st.markdown(
+    '<div class="section-title">Historique des ventes</div>',
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    """
+    <div class="info-box">
+        Saisissez les ventes des 30 derniers jours
+        <strong>de la plus ancienne à la plus récente</strong>.<br><br>
+        La dernière valeur saisie correspond à la vente
+        la plus récente.
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
+default_history = (
+    "27, 25, 23, 24, 26, 28, 27, 25, 23, 21, "
+    "22, 23, 24, 25, 27, 26, 24, 23, 22, 21, "
+    "23, 25, 27, 28, 26, 25, 24, 20, 21, 22"
+)
+
+
+history_input = st.text_area(
+    "Ventes : plus ancienne → plus récente",
+    value=default_history,
+    height=130,
+    help=(
+        "Saisissez exactement 30 valeurs séparées par des virgules. "
+        "La dernière valeur doit être la plus récente."
+    )
+)
+
+
+# Bouton de prévision
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+if st.button(
+    "Obtenir la prévision",
+    use_container_width=True
+):
+
+    try:
+
+        # Conversion du texte en liste de nombres
+
+        historique_ventes = [
+            float(x.strip())
+            for x in history_input.split(",")
+            if x.strip()
+        ]
+
+
+        # Vérification du nombre de valeurs
+
+        if len(historique_ventes) != 30:
 
             st.error(
-                "Impossible de contacter l'API FastAPI."
-            )
-
-            st.warning(
-                """
-                Vérifiez que votre serveur FastAPI est démarré
-                à l'adresse :
-
-                `http://127.0.0.1:8000`
-                """
+                f"Vous avez saisi {len(historique_ventes)} valeurs. "
+                "L'historique doit contenir exactement 30 valeurs."
             )
 
             st.stop()
 
 
-        except requests.exceptions.Timeout:
+        # Vérification des valeurs négatives
+
+        if any(vente < 0 for vente in historique_ventes):
 
             st.error(
-                "Le délai d'attente de l'API a été dépassé."
+                "Les ventes ne peuvent pas être négatives."
             )
 
             st.stop()
 
 
-        except requests.exceptions.RequestException as erreur:
+        # Appel de l'API
+
+        with st.spinner(
+            "Calcul de la prévision en cours..."
+        ):
+
+            url = (
+                "https://prevision-demande-article.onrender.com"
+                "/predict"
+            )
+
+            payload = {
+                "store": int(store),
+                "item": int(item),
+                "date_prevision": str(date_prevision),
+                "historique_ventes": historique_ventes
+            }
+
+            response = requests.post(
+                url,
+                json=payload,
+                timeout=60
+            )
+
+
+        # Traitement de la réponse
+
+        if response.status_code == 200:
+
+            resultat = response.json()
+
+            demande_prevue = resultat["demande_prevue"]
+
+            st.markdown(
+                f"""
+                <div class="result-box">
+                    <div class="result-title">
+                        Demande prévue
+                    </div>
+
+                    <div class="result-value">
+                        {demande_prevue} unités
+                    </div>
+
+                    <div class="result-details">
+                        Magasin : {resultat["store"]}
+                        &nbsp;&nbsp;|&nbsp;&nbsp;
+                        Article : {resultat["item"]}
+                        &nbsp;&nbsp;|&nbsp;&nbsp;
+                        Date : {resultat["date_prevision"]}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+
+        else:
 
             st.error(
-                f"Une erreur de communication avec l'API est survenue : {erreur}"
+                f"Erreur de l'API (code {response.status_code})"
             )
 
-            st.stop()
+            try:
+
+                erreur = response.json()
+
+                if isinstance(erreur, dict) and "detail" in erreur:
+
+                    st.warning(
+                        erreur["detail"]
+                    )
+
+                else:
+
+                    st.json(erreur)
+
+            except Exception:
+
+                st.write(response.text)
 
 
-    # Traitement de la réponse
+    except ValueError:
 
-    if reponse.status_code == 200:
-
-        resultat = reponse.json()
-
-        demande_prevue = resultat["demande_prevue"]
-
-        # Affichage du résultat
-
-        st.success("Prévision réalisée avec succès.")
-
-        st.subheader("Résultat de la prévision")
-
-        colonne1, colonne2, colonne3 = st.columns(3)
-
-        with colonne1:
-            st.metric(
-                "Magasin",
-                resultat["store"]
-            )
-
-        with colonne2:
-            st.metric(
-                "Article",
-                resultat["item"]
-            )
-
-        with colonne3:
-            st.metric(
-                "Demande prévue",
-                f"{demande_prevue:.2f}"
-            )
-
-
-        st.info(
-            f"""
-            Pour l'article **{resultat['item']}**, dans le magasin
-            **{resultat['store']}**, la demande prévue pour le
-            **{resultat['date_prevision']}** est de :
-
-            ###  {demande_prevue:.2f} unités
-            """
+        st.error(
+            "Veuillez saisir uniquement des nombres valides "
+            "séparés par des virgules."
         )
 
 
-        # ----------------------------------------------------
-        # Informations complémentaires
-        # ----------------------------------------------------
-
-        with st.expander(" Voir les données utilisées"):
-
-            st.write(
-                f"**Nombre de ventes historiques :** {len(historique)}"
-            )
-
-            st.write(
-                f"**Première vente fournie :** {historique[0]}"
-            )
-
-            st.write(
-                f"**Dernière vente fournie :** {historique[-1]}"
-            )
-
-            st.write(
-                f"**Date de prévision :** "
-                f"{resultat['date_prevision']}"
-            )
-
-
-    else:
-
-        # Erreur retournée par FastAPI
-
-        try:
-            detail = reponse.json().get(
-                "detail",
-                "Une erreur inconnue est survenue."
-            )
-
-        except ValueError:
-            detail = (
-                "L'API a retourné une réponse inattendue."
-            )
+    except requests.exceptions.Timeout:
 
         st.error(
-            f"La prévision n'a pas pu être réalisée.\n\n"
-            f"**Détail :** {detail}"
+            "Le serveur met trop de temps à répondre. "
+            "Veuillez réessayer dans quelques instants."
+        )
+
+
+    except requests.exceptions.ConnectionError:
+
+        st.error(
+            "Impossible de contacter l'API. "
+            "Vérifiez que le service Render est disponible."
+        )
+
+
+    except Exception as erreur:
+
+        st.error(
+            f"Une erreur inattendue est survenue : {erreur}"
         )
