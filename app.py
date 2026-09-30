@@ -1,11 +1,12 @@
 import streamlit as st
 import requests
+import pandas as pd
 
 
 # Configuration de la page
 
 st.set_page_config(
-    page_title="Prévision de la demande d'articles en magasin",
+    page_title="Prévision de la demande d’articles en magasin",
     layout="centered"
 )
 
@@ -71,7 +72,6 @@ st.markdown(
 
 col1, col2 = st.columns(2)
 
-
 with col1:
 
     store = st.number_input(
@@ -98,7 +98,6 @@ with col1:
         )
     )
 
-
 with col2:
 
     date_prevision = st.date_input(
@@ -111,47 +110,281 @@ st.caption(
 )
 
 
-# Historique des ventes
+# Choix du mode de saisie
 
 st.markdown(
-    '<div class="section-title">Historique des ventes</div>',
+    '<div class="section-title">Source des données</div>',
     unsafe_allow_html=True
 )
 
-st.info(
-    "Saisissez exactement 30 valeurs de ventes, "
-    "de la plus ancienne à la plus récente. "
-    "La dernière valeur correspond à la vente la plus récente."
+mode_saisie = st.radio(
+    "Choisissez une méthode",
+    [
+        "Charger un fichier CSV",
+        "Saisir manuellement"
+    ]
 )
 
 
-default_history = (
-    "27, 25, 23, 24, 26, 28, 27, 25, 23, 21, "
-    "22, 23, 24, 25, 27, 26, 24, 23, 22, 21, "
-    "23, 25, 27, 28, 26, 25, 24, 20, 21, 22"
-)
+historique_ventes = None
 
 
-history_input = st.text_area(
-    "Ventes des 30 derniers jours",
-    value=default_history,
-    height=130,
-    placeholder="Exemple : 20, 22, 18, 25, ...",
-    help=(
-        "Séparez les valeurs par des virgules. "
-        "La dernière valeur doit être la plus récente."
+# Mode 1 : chargement du fichier CSV
+
+if mode_saisie == "Charger un fichier CSV":
+
+    fichier = st.file_uploader(
+        "Sélectionnez le fichier CSV",
+        type=["csv"],
+        help=(
+            "Le fichier doit contenir les colonnes : "
+            "date, store, item et sales."
+        )
     )
-)
+
+    if fichier is not None:
+
+        try:
+
+            # Lecture du fichier CSV
+
+            df = pd.read_csv(fichier)
+
+            # Nettoyage des noms de colonnes
+
+            df.columns = df.columns.str.strip()
+
+            colonnes_requises = [
+                "date",
+                "store",
+                "item",
+                "sales"
+            ]
+
+            # Vérification des colonnes
+
+            colonnes_manquantes = [
+                colonne
+                for colonne in colonnes_requises
+                if colonne not in df.columns
+            ]
+
+            if colonnes_manquantes:
+
+                st.error(
+                    "Le fichier ne contient pas toutes les colonnes "
+                    "nécessaires."
+                )
+
+                st.write(
+                    "Colonnes manquantes : "
+                    + ", ".join(colonnes_manquantes)
+                )
+
+                st.stop()
+
+            # Conversion de la date
+
+            df["date"] = pd.to_datetime(
+                df["date"],
+                errors="coerce"
+            )
+
+            # Conversion des identifiants
+
+            df["store"] = pd.to_numeric(
+                df["store"],
+                errors="coerce"
+            )
+
+            df["item"] = pd.to_numeric(
+                df["item"],
+                errors="coerce"
+            )
+
+            # Conversion des ventes
+
+            df["sales"] = pd.to_numeric(
+                df["sales"],
+                errors="coerce"
+            )
+
+            # Suppression des lignes invalides
+
+            df = df.dropna(
+                subset=[
+                    "date",
+                    "store",
+                    "item",
+                    "sales"
+                ]
+            )
+
+            # Vérification des ventes négatives
+
+            if (df["sales"] < 0).any():
+
+                st.error(
+                    "Le fichier contient des valeurs de ventes négatives."
+                )
+
+                st.stop()
+
+            # Conversion des identifiants en entiers
+
+            df["store"] = df["store"].astype(int)
+            df["item"] = df["item"].astype(int)
+
+            # Filtrage selon le magasin et l'article sélectionnés
+
+            df_filtre = df[
+                (df["store"] == int(store))
+                &
+                (df["item"] == int(item))
+            ].copy()
+
+            # Vérification de l'existence du couple magasin/article
+
+            if df_filtre.empty:
+
+                st.error(
+                    f"Aucune donnée trouvée pour le magasin {int(store)} "
+                    f"et l'article {int(item)}."
+                )
+
+                st.stop()
+
+            # Tri des données par date
+
+            df_filtre = df_filtre.sort_values(
+                "date"
+            )
+
+            # Suppression des éventuels doublons
+
+            df_filtre = df_filtre.drop_duplicates(
+                subset=[
+                    "date",
+                    "store",
+                    "item"
+                ],
+                keep="last"
+            )
+
+            # Conservation des 30 dernières observations
+
+            df_30 = df_filtre.tail(30).copy()
+
+            # Vérification du nombre d'observations
+
+            if len(df_30) < 30:
+
+                st.error(
+                    f"Seulement {len(df_30)} observations sont disponibles "
+                    "pour ce magasin et cet article. "
+                    "Il faut au minimum 30 observations."
+                )
+
+                st.stop()
+
+            # Création de l'historique des ventes
+
+            historique_ventes = (
+                df_30["sales"]
+                .astype(float)
+                .tolist()
+            )
+
+            st.success(
+                "Les 30 dernières observations ont été récupérées "
+                "avec succès."
+            )
+
+            # Informations sur les données utilisées
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+
+                st.caption("Observations")
+
+                st.write(len(historique_ventes))
+
+            with col2:
+
+                st.caption("Dernière date disponible")
+
+                st.write(
+                    df_30["date"].max().strftime("%d/%m/%Y")
+                )
+
+            with col3:
+
+                st.caption("Magasin / Article")
+
+                st.write(
+                    f"{int(store)} / {int(item)}"
+                )
+
+            # Affichage de l'historique
+
+            with st.expander(
+                "Voir les 30 dernières ventes"
+            ):
+
+                historique_affichage = df_30[
+                    [
+                        "date",
+                        "store",
+                        "item",
+                        "sales"
+                    ]
+                ].copy()
+
+                historique_affichage["date"] = (
+                    historique_affichage["date"]
+                    .dt.strftime("%d/%m/%Y")
+                )
+
+                st.dataframe(
+                    historique_affichage,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+        except Exception as erreur:
+
+            st.error(
+                f"Impossible de lire le fichier CSV : {erreur}"
+            )
 
 
-# Bouton de prévision
+# Mode 2 : saisie manuelle
 
-st.markdown("<br>", unsafe_allow_html=True)
+else:
 
-if st.button(
-    "Calculer la prévision",
-    use_container_width=True
-):
+    st.info(
+        "Saisissez exactement 30 valeurs de ventes, "
+        "de la plus ancienne à la plus récente. "
+        "La dernière valeur correspond à la vente la plus récente."
+    )
+
+    default_history = (
+        "27, 25, 23, 24, 26, 28, 27, 25, 23, 21, "
+        "22, 23, 24, 25, 27, 26, 24, 23, 22, 21, "
+        "23, 25, 27, 28, 26, 25, 24, 20, 21, 22"
+    )
+
+    history_input = st.text_area(
+        "Ventes des 30 derniers jours",
+        value=default_history,
+        height=130,
+        placeholder="Exemple : 20, 22, 18, 25, ...",
+        help=(
+            "Séparez les valeurs par des virgules. "
+            "La dernière valeur doit être la plus récente."
+        )
+    )
 
     try:
 
@@ -163,38 +396,67 @@ if st.button(
             if x.strip()
         ]
 
-
         # Vérification du nombre de valeurs
 
         if len(historique_ventes) != 30:
 
-            st.error(
-                f"Vous avez saisi {len(historique_ventes)} valeurs. "
+            st.warning(
+                f"Vous avez actuellement {len(historique_ventes)} valeurs. "
                 "L'historique doit contenir exactement 30 valeurs."
             )
 
-            st.stop()
-
+            historique_ventes = None
 
         # Vérification des valeurs négatives
 
-        if any(vente < 0 for vente in historique_ventes):
+        elif any(
+            vente < 0
+            for vente in historique_ventes
+        ):
 
             st.error(
                 "Les valeurs de ventes ne peuvent pas être négatives."
             )
 
-            st.stop()
+            historique_ventes = None
 
+    except ValueError:
+
+        st.error(
+            "Les ventes doivent être saisies sous forme de nombres "
+            "séparés par des virgules."
+        )
+
+        historique_ventes = None
+
+
+# Bouton de prévision
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+if st.button(
+    "Calculer la prévision",
+    use_container_width=True
+):
+
+    # Vérification de l'historique avant l'envoi à l'API
+
+    if historique_ventes is None:
+
+        st.error(
+            "Veuillez fournir un historique valide de 30 ventes."
+        )
+
+        st.stop()
+
+    try:
 
         # Adresse de l'API
 
         url = (
             "https://prevision-demande-article.onrender.com"
             "/predict"
-            
         )
-
 
         # Données envoyées à l'API
 
@@ -204,7 +466,6 @@ if st.button(
             "date_prevision": str(date_prevision),
             "historique_ventes": historique_ventes
         }
-
 
         # Appel de l'API
 
@@ -218,20 +479,19 @@ if st.button(
                 timeout=60
             )
 
-
         # Traitement de la réponse
 
         if response.status_code == 200:
 
             resultat = response.json()
 
-            demande_prevue = resultat["demande_prevue"]
-
+            demande_prevue = resultat[
+                "demande_prevue"
+            ]
 
             st.success(
                 "Prévision calculée avec succès."
             )
-
 
             # Résultat principal
 
@@ -241,15 +501,13 @@ if st.button(
             )
 
             st.metric(
-                label="Demande prévue",
+                label="Demande prévue pour le lendemain",
                 value=f"{demande_prevue} unités"
             )
-
 
             # Informations de la prévision
 
             col1, col2, col3 = st.columns(3)
-
 
             with col1:
 
@@ -259,7 +517,6 @@ if st.button(
                     resultat["store"]
                 )
 
-
             with col2:
 
                 st.caption("Article")
@@ -268,7 +525,6 @@ if st.button(
                     resultat["item"]
                 )
 
-
             with col3:
 
                 st.caption("Date de prévision")
@@ -276,7 +532,6 @@ if st.button(
                 st.write(
                     resultat["date_prevision"]
                 )
-
 
         else:
 
@@ -307,16 +562,9 @@ if st.button(
 
             except Exception:
 
-                st.write(response.text)
-
-
-    except ValueError:
-
-        st.error(
-            "Les ventes doivent être saisies sous forme de nombres "
-            "séparés par des virgules."
-        )
-
+                st.write(
+                    response.text
+                )
 
     except requests.exceptions.Timeout:
 
@@ -325,7 +573,6 @@ if st.button(
             "Veuillez réessayer dans quelques instants."
         )
 
-
     except requests.exceptions.ConnectionError:
 
         st.error(
@@ -333,6 +580,11 @@ if st.button(
             "Vérifiez que le service Render est disponible."
         )
 
+    except requests.exceptions.RequestException as erreur:
+
+        st.error(
+            f"Une erreur est survenue lors de l'appel à l'API : {erreur}"
+        )
 
     except Exception as erreur:
 
