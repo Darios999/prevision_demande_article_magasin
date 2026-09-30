@@ -5,92 +5,42 @@ import requests
 # Configuration de la page
 
 st.set_page_config(
-    page_title="Prévision de la demande",
-    page_icon=None,
+    page_title="Prévision de la demande d'articles en magasin",
     layout="centered"
 )
 
 
-# Style de l'interface
+# Style général
 
 st.markdown(
     """
     <style>
+        .block-container {
+            max-width: 900px;
+            padding-top: 2.5rem;
+            padding-bottom: 3rem;
+        }
 
-    .main {
-        max-width: 900px;
-        margin: auto;
-    }
+        .description {
+            font-size: 1rem;
+            opacity: 0.75;
+            margin-top: -0.5rem;
+            margin-bottom: 2rem;
+        }
 
-    .header {
-        padding: 25px 30px;
-        border-radius: 12px;
-        background-color: #f5f7fa;
-        border: 1px solid #e1e5ea;
-        margin-bottom: 25px;
-    }
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-top: 1.8rem;
+            margin-bottom: 0.8rem;
+        }
 
-    .header h1 {
-        margin-bottom: 8px;
-        font-size: 30px;
-    }
-
-    .header p {
-        margin-bottom: 0;
-        color: #5f6368;
-        font-size: 16px;
-    }
-
-    .section-title {
-        font-size: 20px;
-        font-weight: 600;
-        margin-top: 25px;
-        margin-bottom: 15px;
-    }
-
-    .info-box {
-        padding: 15px 18px;
-        border-radius: 8px;
-        background-color: #f8f9fa;
-        border: 1px solid #e1e5ea;
-        margin: 15px 0;
-        color: #4a4a4a;
-    }
-
-    .result-box {
-        padding: 25px;
-        border-radius: 12px;
-        background-color: #f5f7fa;
-        border: 1px solid #d9dee5;
-        text-align: center;
-        margin-top: 25px;
-    }
-
-    .result-title {
-        font-size: 15px;
-        color: #5f6368;
-        margin-bottom: 8px;
-    }
-
-    .result-value {
-        font-size: 36px;
-        font-weight: 700;
-        margin-bottom: 12px;
-    }
-
-    .result-details {
-        color: #5f6368;
-        font-size: 14px;
-    }
-
-    div.stButton > button {
-        width: 100%;
-        border-radius: 8px;
-        height: 48px;
-        font-size: 16px;
-        font-weight: 600;
-    }
-
+        div.stButton > button {
+            width: 100%;
+            min-height: 3rem;
+            font-size: 1rem;
+            font-weight: 600;
+        }
     </style>
     """,
     unsafe_allow_html=True
@@ -99,24 +49,23 @@ st.markdown(
 
 # En-tête
 
+st.title("Prévision de la demande")
+
 st.markdown(
     """
-    <div class="header">
-        <h1>Prévision de la demande</h1>
-        <p>
-            Application de prévision des ventes d'articles
-            à partir de l'historique des ventes.
-        </p>
+    <div class="description">
+        Estimation de la demande future d'un article
+        à partir de son historique récent de ventes.
     </div>
     """,
     unsafe_allow_html=True
 )
 
 
-# Paramètres de la prévision
+# Paramètres de prévision
 
 st.markdown(
-    '<div class="section-title">Paramètres de la prévision</div>',
+    '<div class="section-title">Paramètres de prévision</div>',
     unsafe_allow_html=True
 )
 
@@ -132,8 +81,8 @@ with col1:
         value=1,
         step=1,
         help=(
-            "Les magasins disponibles dans le modèle "
-            "sont numérotés de 1 à 10."
+            "Le modèle actuel utilise les magasins "
+            "identifiés de 1 à 10."
         )
     )
 
@@ -144,8 +93,8 @@ with col1:
         value=10,
         step=1,
         help=(
-            "Les articles disponibles dans le modèle "
-            "sont numérotés de 1 à 50."
+            "Le modèle actuel utilise les articles "
+            "identifiés de 1 à 50."
         )
     )
 
@@ -157,19 +106,8 @@ with col2:
     )
 
 
-# Informations
-
-st.markdown(
-    """
-    <div class="info-box">
-        <strong>Informations sur les données</strong><br><br>
-        Le modèle a été entraîné avec 10 magasins
-        et 50 articles.<br>
-        Les identifiants acceptés sont donc :
-        magasins de 1 à 10 et articles de 1 à 50.
-    </div>
-    """,
-    unsafe_allow_html=True
+st.caption(
+    "Périmètre actuel du modèle : 10 magasins et 50 articles."
 )
 
 
@@ -180,16 +118,10 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.markdown(
-    """
-    <div class="info-box">
-        Saisissez les ventes des 30 derniers jours
-        <strong>de la plus ancienne à la plus récente</strong>.<br><br>
-        La dernière valeur saisie correspond à la vente
-        la plus récente.
-    </div>
-    """,
-    unsafe_allow_html=True
+st.info(
+    "Saisissez exactement 30 valeurs de ventes, "
+    "de la plus ancienne à la plus récente. "
+    "La dernière valeur correspond à la vente la plus récente."
 )
 
 
@@ -201,11 +133,12 @@ default_history = (
 
 
 history_input = st.text_area(
-    "Ventes : plus ancienne → plus récente",
+    "Ventes des 30 derniers jours",
     value=default_history,
     height=130,
+    placeholder="Exemple : 20, 22, 18, 25, ...",
     help=(
-        "Saisissez exactement 30 valeurs séparées par des virgules. "
+        "Séparez les valeurs par des virgules. "
         "La dernière valeur doit être la plus récente."
     )
 )
@@ -216,7 +149,7 @@ history_input = st.text_area(
 st.markdown("<br>", unsafe_allow_html=True)
 
 if st.button(
-    "Obtenir la prévision",
+    "Calculer la prévision",
     use_container_width=True
 ):
 
@@ -248,10 +181,28 @@ if st.button(
         if any(vente < 0 for vente in historique_ventes):
 
             st.error(
-                "Les ventes ne peuvent pas être négatives."
+                "Les valeurs de ventes ne peuvent pas être négatives."
             )
 
             st.stop()
+
+
+        # Adresse de l'API
+
+        url = (
+            "https://prevision-demande-article.onrender.com"
+            "/predict"
+        )
+
+
+        # Données envoyées à l'API
+
+        payload = {
+            "store": int(store),
+            "item": int(item),
+            "date_prevision": str(date_prevision),
+            "historique_ventes": historique_ventes
+        }
 
 
         # Appel de l'API
@@ -259,18 +210,6 @@ if st.button(
         with st.spinner(
             "Calcul de la prévision en cours..."
         ):
-
-            url = (
-                "https://prevision-demande-article.onrender.com"
-                "/predict"
-            )
-
-            payload = {
-                "store": int(store),
-                "item": int(item),
-                "date_prevision": str(date_prevision),
-                "historique_ventes": historique_ventes
-            }
 
             response = requests.post(
                 url,
@@ -287,49 +226,83 @@ if st.button(
 
             demande_prevue = resultat["demande_prevue"]
 
+
+            st.success(
+                "Prévision calculée avec succès."
+            )
+
+
+            # Résultat principal
+
             st.markdown(
-                f"""
-                <div class="result-box">
-                    <div class="result-title">
-                        Demande prévue
-                    </div>
-
-                    <div class="result-value">
-                        {demande_prevue} unités
-                    </div>
-
-                    <div class="result-details">
-                        Magasin : {resultat["store"]}
-                        &nbsp;&nbsp;|&nbsp;&nbsp;
-                        Article : {resultat["item"]}
-                        &nbsp;&nbsp;|&nbsp;&nbsp;
-                        Date : {resultat["date_prevision"]}
-                    </div>
-                </div>
-                """,
+                '<div class="section-title">Résultat</div>',
                 unsafe_allow_html=True
             )
+
+            st.metric(
+                label="Demande prévue",
+                value=f"{demande_prevue} unités"
+            )
+
+
+            # Informations de la prévision
+
+            col1, col2, col3 = st.columns(3)
+
+
+            with col1:
+
+                st.caption("Magasin")
+
+                st.write(
+                    resultat["store"]
+                )
+
+
+            with col2:
+
+                st.caption("Article")
+
+                st.write(
+                    resultat["item"]
+                )
+
+
+            with col3:
+
+                st.caption("Date de prévision")
+
+                st.write(
+                    resultat["date_prevision"]
+                )
 
 
         else:
 
             st.error(
-                f"Erreur de l'API (code {response.status_code})"
+                f"Erreur lors de la communication avec l'API "
+                f"(code {response.status_code})."
             )
 
             try:
 
                 erreur = response.json()
 
-                if isinstance(erreur, dict) and "detail" in erreur:
+                if isinstance(erreur, dict):
 
-                    st.warning(
-                        erreur["detail"]
-                    )
+                    if "detail" in erreur:
+
+                        st.warning(
+                            erreur["detail"]
+                        )
+
+                    else:
+
+                        st.json(erreur)
 
                 else:
 
-                    st.json(erreur)
+                    st.write(erreur)
 
             except Exception:
 
@@ -339,7 +312,7 @@ if st.button(
     except ValueError:
 
         st.error(
-            "Veuillez saisir uniquement des nombres valides "
+            "Les ventes doivent être saisies sous forme de nombres "
             "séparés par des virgules."
         )
 
