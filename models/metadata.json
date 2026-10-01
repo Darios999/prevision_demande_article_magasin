@@ -1,12 +1,7 @@
 {
     "features": [
-        "store",
-        "item",
-        "year",
         "month",
-        "day",
         "day_of_week",
-        "week",
         "sales_lag_1",
         "sales_lag_7",
         "sales_lag_14",

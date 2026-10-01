@@ -1,209 +1,223 @@
 from pathlib import Path
+from datetime import datetime
 
 import joblib
 import pandas as pd
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 
-# Chemin du projet
-
+# Chemin vers le dossier principal du projet
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-MODEL_PATH = BASE_DIR / "models" / "modele_demande_random_forest.joblib"
+
+# Chemin vers le modèle enregistré
+CHEMIN_MODELE = (
+    BASE_DIR
+    / "models"
+    / "modele_demande_random_forest.joblib"
+)
 
 
 # Chargement du modèle
-
 try:
-    model = joblib.load(MODEL_PATH, mmap_mode="r")
+    modele = joblib.load(
+        CHEMIN_MODELE,
+        mmap_mode="r"
+    )
 except Exception as erreur:
-    model = None
-    print("Erreur lors du chargement du modèle :", erreur)
+    modele = None
+    erreur_chargement = str(erreur)
 
 
 # Création de l'application FastAPI
-
 app = FastAPI(
     title="API de prévision de la demande",
     description=(
-        "API permettant de prévoir la demande d'un article "
-        "dans un magasin à partir de son historique de ventes."
+        "API permettant de prévoir la demande à partir "
+        "d'un historique de ventes."
     ),
     version="1.0.0"
 )
 
 
-# Structure des données reçues
-
+# Structure des données reçues par l'API
 class DonneesPrediction(BaseModel):
-    store: int
-    item: int
     date_prevision: str
     historique_ventes: list[float]
 
 
-# Page d'accueil
+# Création des variables nécessaires au modèle
+def creer_variables(date_prevision, historique_ventes):
+    """
+    Prépare les variables utilisées par le modèle
+    à partir de la date et de l'historique des ventes.
+    """
 
+    # Le modèle a besoin d'au moins 30 observations
+    if len(historique_ventes) < 30:
+        raise ValueError(
+            "Au moins 30 valeurs de ventes sont nécessaires."
+        )
+
+    # Les ventes négatives ne sont pas acceptées
+    if any(
+        valeur < 0
+        for valeur in historique_ventes
+    ):
+        raise ValueError(
+            "Les valeurs de ventes ne peuvent pas être négatives."
+        )
+
+    # Conversion de la date reçue en date exploitable
+    try:
+        date = pd.to_datetime(
+            date_prevision
+        )
+    except Exception:
+        raise ValueError(
+            "La date de prévision est invalide."
+        )
+
+    # On utilise l'historique dans l'ordre
+    # ancienne valeur -> valeur la plus récente
+    historique = pd.Series(
+        historique_ventes,
+        dtype="float64"
+    )
+
+    # La dernière valeur correspond donc à la vente
+    # la plus récente disponible
+    derniere_vente = historique.iloc[-1]
+
+    # Création des variables demandées par le modèle
+    variables = {
+        "month": date.month,
+        "day_of_week": date.dayofweek,
+
+        "sales_lag_1": historique.iloc[-1],
+
+        "sales_lag_7": historique.iloc[-7],
+
+        "sales_lag_14": historique.iloc[-14],
+
+        # Moyenne des 7 dernières ventes
+        "rolling_mean_7": historique.tail(7).mean(),
+
+        # Moyenne des 14 dernières ventes
+        "rolling_mean_14": historique.tail(14).mean(),
+
+        # Moyenne des 30 dernières ventes
+        "rolling_mean_30": historique.tail(30).mean()
+    }
+
+    # Transformation en DataFrame pour le modèle
+    donnees = pd.DataFrame(
+        [variables]
+    )
+
+    return donnees
+
+
+# Page d'accueil de l'API
 @app.get("/")
 def accueil():
     return {
         "message": "API de prévision de la demande",
-        "documentation": "/docs",
-        "statut": "active"
+        "statut": "fonctionnelle"
     }
 
 
-# Vérification de l'API
-
+# Vérification de l'état de l'API
 @app.get("/health")
 def health():
-    if model is None:
+    if modele is None:
         return {
-            "status": "error",
-            "message": "Le modèle n'a pas pu être chargé."
+            "statut": "erreur",
+            "modele_charge": False,
+            "message": (
+                "Le modèle n'a pas pu être chargé."
+            )
         }
 
     return {
-        "status": "ok",
-        "message": "API et modèle opérationnels."
+        "statut": "ok",
+        "modele_charge": True
     }
 
 
-# Création des variables du modèle
-
-def creer_variables(
-    store: int,
-    item: int,
-    date_prevision: str,
-    historique_ventes: list[float]
-):
-
-    # Vérification du magasin
-
-    if store < 1 or store > 10:
-        raise HTTPException(
-            status_code=400,
-            detail="Le magasin doit être compris entre 1 et 10."
-        )
-
-    # Vérification de l'article
-
-    if item < 1 or item > 50:
-        raise HTTPException(
-            status_code=400,
-            detail="L'article doit être compris entre 1 et 50."
-        )
-
-    # Vérification de l'historique
-
-    if len(historique_ventes) < 30:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "L'historique doit contenir au moins "
-                "30 jours de ventes."
-            )
-        )
-
-    # Vérification des valeurs de ventes
-
-    if any(vente < 0 for vente in historique_ventes):
-        raise HTTPException(
-            status_code=400,
-            detail="Les valeurs de ventes ne peuvent pas être négatives."
-        )
-
-    # Conversion de la date
-
-    try:
-        date = pd.to_datetime(date_prevision)
-    except Exception:
-        raise HTTPException(
-            status_code=400,
-            detail="La date doit être au format YYYY-MM-DD."
-        )
-
-    # Conversion de l'historique en série pandas
-
-    ventes = pd.Series(historique_ventes, dtype=float)
-
-    # Création des variables
-
-    variables = {
-        "store": store,
-        "item": item,
-        "year": date.year,
-        "month": date.month,
-        "day": date.day,
-        "day_of_week": date.dayofweek,
-        "week": int(date.isocalendar().week),
-
-        "sales_lag_1": ventes.iloc[-1],
-        "sales_lag_7": ventes.iloc[-7],
-        "sales_lag_14": ventes.iloc[-14],
-
-        "rolling_mean_7": ventes.iloc[-7:].mean(),
-        "rolling_mean_14": ventes.iloc[-14:].mean(),
-        "rolling_mean_30": ventes.iloc[-30:].mean()
-    }
-
-    return pd.DataFrame([variables])
-
-
-# Prédiction
-
+# Endpoint permettant d'effectuer une prévision
 @app.post("/predict")
 def predire(donnees: DonneesPrediction):
 
-    if model is None:
+    # Vérification du chargement du modèle
+    if modele is None:
         raise HTTPException(
             status_code=500,
-            detail="Le modèle n'est pas disponible."
+            detail=(
+                "Le modèle n'est pas disponible sur le serveur."
+            )
         )
 
-    # Création des variables
+    try:
 
-    donnees_modele = creer_variables(
-        store=donnees.store,
-        item=donnees.item,
-        date_prevision=donnees.date_prevision,
-        historique_ventes=donnees.historique_ventes
-    )
+        # Création des variables à partir
+        # des données envoyées par Streamlit
+        variables = creer_variables(
+            donnees.date_prevision,
+            donnees.historique_ventes
+        )
 
-    # Variables utilisées pendant l'entraînement
+        # Ordre exact des variables utilisées
+        # lors de l'entraînement du modèle
+        variables = variables[
+            [
+                "month",
+                "day_of_week",
+                "sales_lag_1",
+                "sales_lag_7",
+                "sales_lag_14",
+                "rolling_mean_7",
+                "rolling_mean_14",
+                "rolling_mean_30"
+            ]
+        ]
 
-    features = [
-        "store",
-        "item",
-        "year",
-        "month",
-        "day",
-        "day_of_week",
-        "week",
-        "sales_lag_1",
-        "sales_lag_7",
-        "sales_lag_14",
-        "rolling_mean_7",
-        "rolling_mean_14",
-        "rolling_mean_30"
-    ]
+        # Réalisation de la prévision
+        prediction = modele.predict(
+            variables
+        )
 
-    # Vérification de l'ordre des variables
+        # Récupération de la valeur prédite
+        demande_prevue = float(
+            prediction[0]
+        )
 
-    donnees_modele = donnees_modele[features]
+        # Une demande ne peut pas être négative
+        demande_prevue = max(
+            0,
+            demande_prevue
+        )
 
-    # Prédiction
+        # Réponse envoyée à Streamlit
+        return {
+            "date_prevision": donnees.date_prevision,
+            "demande_prevue": demande_prevue
+        }
 
-    prediction = model.predict(donnees_modele)[0]
+    except ValueError as erreur:
 
-    # Une demande négative n'a pas de sens
+        raise HTTPException(
+            status_code=400,
+            detail=str(erreur)
+        )
 
-    prediction = max(0, prediction)
+    except Exception as erreur:
 
-    return {
-        "store": donnees.store,
-        "item": donnees.item,
-        "date_prevision": donnees.date_prevision,
-        "demande_prevue": round(float(prediction), 2)
-    }
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Erreur lors de la prévision : {erreur}"
+            )
+        )
