@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 from pathlib import Path
 import streamlit as st
-from datetime import date,timedelt
+from datetime import date,timedelta
 
 
 # Configuration de la page
