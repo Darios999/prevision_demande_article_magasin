@@ -271,6 +271,27 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+st.markdown("""
+<style>
+    /* Agrandir et styliser les radios comme des cartes */
+    div[data-testid="stRadio"] > div {
+        display: flex;
+        gap: 15px;
+    }
+    div[data-testid="stRadio"] label {
+        background-color: #1e2530;
+        border: 1px solid #333d4d;
+        padding: 12px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    div[data-testid="stRadio"] label:hover {
+        border-color: #ff6c37;
+        background-color: #262f3e;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 
 # Afficher un message
