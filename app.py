@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 from pathlib import Path
 import streamlit as st
-from datetime import date,timedelta
+from datetime import date,timedelt
 
 
 # Configuration de la page
@@ -449,7 +449,7 @@ def lire_fichier(fichier):
 
 # En-tête de l'application
 
-st.markdown('<div class="hero"><h1>Prévision de la <span>demande</span></h1><p>Estimez la demande future à partir de l\'historique des ventes et accompagnez la prise de décision en magasin.</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="hero"><h1>Prévision de la <span>demande</span></h1><p>Estimez la demande future à partir de l\'historique des ventes et accompagnez la prise de décision en magasin. Notez qu\'il s\'agit d\'une prévision à court terme </p></div>', unsafe_allow_html=True)
 
 # Choix du mode de saisie
 
