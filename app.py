@@ -14,9 +14,8 @@ st.set_page_config(
 
 
 # Adresse de l'API
-API_URL = "https://TON-LIEN-API.onrender.com/predict"
 
-
+API_URL = "https://prevision-demande-article.onrender.com"
 # Chemin vers l'image de fond
 DOSSIER_PROJET = Path(__file__).resolve().parent
 CHEMIN_FOND = DOSSIER_PROJET / "assets" / "fond_magasin.jpg"
