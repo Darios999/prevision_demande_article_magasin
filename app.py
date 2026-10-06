@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 from pathlib import Path
 import streamlit as st
-from datetime import date,timedelta
+from datetime import date, timedelta
 
 
 # Configuration de la page
@@ -128,7 +128,7 @@ st.markdown(
         font-weight: 600 !important;
     }}
 
-    /* Champs de texte et zones d'input */
+    /* Champs de texte */
     input,
     textarea {{
         background-color: rgba(18, 32, 50, 0.95) !important;
@@ -241,6 +241,26 @@ st.markdown(
         border-top: 1px solid rgba(200, 220, 240, 0.15);
     }}
 
+    /* Radio sous forme de cartes */
+    div[data-testid="stRadio"] > div {{
+        display: flex;
+        gap: 15px;
+    }}
+
+    div[data-testid="stRadio"] label {{
+        background-color: #1e2530;
+        border: 1px solid #333d4d;
+        padding: 12px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }}
+
+    div[data-testid="stRadio"] label:hover {{
+        border-color: #ff6c37;
+        background-color: #262f3e;
+    }}
+
     /* Responsive */
     @media (max-width: 768px) {{
 
@@ -271,27 +291,6 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-st.markdown("""
-<style>
-    /* Agrandir et styliser les radios comme des cartes */
-    div[data-testid="stRadio"] > div {
-        display: flex;
-        gap: 15px;
-    }
-    div[data-testid="stRadio"] label {
-        background-color: #1e2530;
-        border: 1px solid #333d4d;
-        padding: 12px 20px;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }
-    div[data-testid="stRadio"] label:hover {
-        border-color: #ff6c37;
-        background-color: #262f3e;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 
 # Afficher un message
@@ -331,6 +330,18 @@ def verifier_historique(historique):
 
         return False
 
+    # Vérifier les valeurs non finies
+    if any(
+        not pd.isna(valeur) and not pd.api.types.is_number(valeur)
+        for valeur in historique
+    ):
+
+        afficher_message(
+            "L'historique contient des valeurs qui ne sont pas numériques."
+        )
+
+        return False
+
     return True
 
 
@@ -349,7 +360,14 @@ def convertir_historique(texte):
         valeur = valeur.strip()
 
         if valeur:
-            valeurs.append(float(valeur))
+
+            nombre = float(valeur)
+
+            if not pd.notna(nombre):
+
+                raise ValueError
+
+            valeurs.append(nombre)
 
     return valeurs
 
@@ -446,13 +464,26 @@ def afficher_resultat(resultat):
         return
 
     # Afficher le résultat
-    st.markdown(f"""
-<div class="resultat">
-    <div class="resultat-titre">📊 Résultat de la prévision</div>
-    <div class="resultat-valeur">{int(float(demande))} unités</div>
-    <div class="resultat-date">📅 Demande prévue pour le {date_prevision}</div>
+    st.markdown(
+        f"""
+ <div class="resultat">
+
+ <div class="resultat-titre">
+ Résultat de la prévision
+ </div>
+
+<div class="resultat-valeur">
+                {int(float(demande))} unités
 </div>
-""", unsafe_allow_html=True)
+
+ <div class="resultat-date">
+                Demande prévue pour le {date_prevision}
+ </div>
+
+ </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 
 # Lire le fichier importé
@@ -468,9 +499,200 @@ def lire_fichier(fichier):
     return pd.read_excel(fichier)
 
 
+# Vérifier strictement les données du fichier
+
+def verifier_donnees_fichier(
+    donnees,
+    colonne_date,
+    colonne_ventes
+):
+
+    erreurs = []
+
+    # Vérifier que les colonnes contiennent des données
+    if donnees[colonne_date].isna().any():
+
+        nombre = donnees[colonne_date].isna().sum()
+
+        erreurs.append(
+            f"{nombre} valeur(s) vide(s) dans la colonne de date."
+        )
+
+    if donnees[colonne_ventes].isna().any():
+
+        nombre = donnees[colonne_ventes].isna().sum()
+
+        erreurs.append(
+            f"{nombre} valeur(s) vide(s) dans la colonne des ventes."
+        )
+
+    # Vérifier chaque valeur de la colonne de date
+    dates_invalides = []
+
+    for index, valeur in donnees[colonne_date].items():
+
+        if pd.isna(valeur):
+
+            continue
+
+        # Refuser explicitement les nombres
+        if isinstance(
+            valeur,
+            (int, float)
+        ) and not isinstance(valeur, bool):
+
+            dates_invalides.append(index)
+
+            continue
+
+        # Les dates déjà reconnues par Excel/Pandas sont acceptées
+        if isinstance(
+            valeur,
+            (pd.Timestamp, date)
+        ):
+
+            continue
+
+        texte = str(valeur).strip()
+
+        # Une cellule vide est invalide
+        if not texte:
+
+            dates_invalides.append(index)
+
+            continue
+
+        # Formats de dates autorisés
+        formats_acceptes = [
+            "%Y-%m-%d",
+            "%d/%m/%Y",
+            "%d-%m-%Y"
+        ]
+
+        date_valide = False
+
+        for format_date in formats_acceptes:
+
+            try:
+
+                pd.to_datetime(
+                    texte,
+                    format=format_date
+                )
+
+                date_valide = True
+
+                break
+
+            except (
+                ValueError,
+                TypeError
+            ):
+
+                continue
+
+        if not date_valide:
+
+            dates_invalides.append(index)
+
+    # Signaler les dates invalides
+    if dates_invalides:
+
+        erreurs.append(
+            f"{len(dates_invalides)} valeur(s) non conforme(s) "
+            "dans la colonne de date. "
+            "Les dates doivent être au format "
+            "AAAA-MM-JJ, JJ/MM/AAAA ou JJ-MM-AAAA."
+        )
+
+    # Vérifier chaque valeur de vente
+    ventes_invalides = []
+
+    for index, valeur in donnees[colonne_ventes].items():
+
+        if pd.isna(valeur):
+
+            continue
+
+        try:
+
+            nombre = float(valeur)
+
+            # Vérifier les nombres négatifs
+            if nombre < 0:
+
+                ventes_invalides.append(index)
+
+        except (
+            ValueError,
+            TypeError
+        ):
+
+            ventes_invalides.append(index)
+
+    # Signaler les ventes invalides
+    if ventes_invalides:
+
+        erreurs.append(
+            f"{len(ventes_invalides)} valeur(s) de vente "
+            "non conforme(s). Les ventes doivent être "
+            "des nombres positifs ou nulles."
+        )
+
+    return erreurs
+
+
+# Convertir une date après validation
+
+def convertir_date(valeur):
+
+    # Si la valeur est déjà une date
+    if isinstance(
+        valeur,
+        (pd.Timestamp, date)
+    ):
+
+        return pd.Timestamp(valeur)
+
+    texte = str(valeur).strip()
+
+    formats_acceptes = [
+        "%Y-%m-%d",
+        "%d/%m/%Y",
+        "%d-%m-%Y"
+    ]
+
+    for format_date in formats_acceptes:
+
+        try:
+
+            return pd.Timestamp(
+                pd.to_datetime(
+                    texte,
+                    format=format_date
+                )
+            )
+
+        except (
+            ValueError,
+            TypeError
+        ):
+
+            continue
+
+    return pd.NaT
+
+
 # En-tête de l'application
 
-st.markdown('<div class="hero"><h1>Prévision de la <span>demande</span></h1><p>Estimez la demande future à partir de l\'historique des ventes et accompagnez la prise de décision en magasin. Notez qu\'il s\'agit d\'une prévision à court terme </p></div>', unsafe_allow_html=True)
+st.markdown("""<div class="hero"><h1> Prévision de la <span>demande</span></h1><p>Estimez la demande future à partir de l'historique des ventes et accompagnez la prise de décision en magasin. Notez qu'il s'agit d'une prévision à court terme. </p>
+
+</div>
+
+    """,
+    unsafe_allow_html=True
+)
+
 
 # Choix du mode de saisie
 
@@ -516,7 +738,7 @@ if mode == "Saisie manuelle":
 
         date_prevision = st.date_input(
             "Date de prévision",
-            value=date.today()+timedelta(days=1),
+            value=date.today() + timedelta(days=1),
             label_visibility="collapsed"
         )
 
@@ -535,7 +757,11 @@ if mode == "Saisie manuelle":
 
         texte_historique = st.text_area(
             "Ventes historiques",
-            value="25, 28, 31, 27, 30, 34, 29, 32, 35, 33, 31, 36, 38, 35, 37, 40, 39, 42, 41, 44, 43, 45, 47, 46, 49, 48, 51, 50, 53, 52",
+            value=(
+                "25, 28, 31, 27, 30, 34, 29, 32, 35, 33, "
+                "31, 36, 38, 35, 37, 40, 39, 42, 41, 44, "
+                "43, 45, 47, 46, 49, 48, 51, 50, 53, 52"
+            ),
             height=180,
             placeholder="Exemple : 25, 31, 28, 35, 30, ...",
             label_visibility="collapsed"
@@ -575,7 +801,10 @@ if mode == "Saisie manuelle":
                     # Afficher le résultat
                     afficher_resultat(resultat)
 
-            except ValueError:
+            except (
+                ValueError,
+                TypeError
+            ):
 
                 afficher_message(
                     "Veuillez saisir uniquement des nombres "
@@ -618,13 +847,23 @@ else:
             if df.empty:
 
                 afficher_message(
-                    "Le fichier importé est vide."
+                    "Erreur : le fichier importé est vide."
                 )
 
             else:
 
                 # Récupérer les colonnes disponibles
                 colonnes = list(df.columns)
+
+                # Vérifier qu'il existe au moins deux colonnes
+                if len(colonnes) < 2:
+
+                    afficher_message(
+                        "Erreur : le fichier doit contenir "
+                        "au moins deux colonnes."
+                    )
+
+                    st.stop()
 
                 # Sélection des colonnes
                 col1, col2 = st.columns(2)
@@ -647,160 +886,173 @@ else:
                 if colonne_date == colonne_ventes:
 
                     afficher_message(
-                        "La colonne de date et la colonne des ventes "
-                        "doivent être différentes."
+                        "Erreur : la colonne de date et la colonne "
+                        "des ventes doivent être différentes."
                     )
 
-                else:
+                    st.stop()
 
-                    # Conserver uniquement les colonnes nécessaires
-                    donnees = df[
-                        [colonne_date, colonne_ventes]
-                    ].copy()
+                # Conserver uniquement les colonnes nécessaires
+                donnees = df[
+                    [colonne_date, colonne_ventes]
+                ].copy()
 
-                    # Convertir les dates
-                    donnees[colonne_date] = pd.to_datetime(
-                        donnees[colonne_date],
-                        errors="coerce"
+                # Vérification stricte des données
+                erreurs = verifier_donnees_fichier(
+                    donnees,
+                    colonne_date,
+                    colonne_ventes
+                )
+
+                # Bloquer toute prévision si une erreur existe
+                if erreurs:
+
+                    for erreur in erreurs:
+
+                        afficher_message(
+                            f"Erreur : {erreur}"
+                        )
+
+                    st.stop()
+
+                # Convertir les dates après validation
+                donnees[colonne_date] = donnees[
+                    colonne_date
+                ].apply(convertir_date)
+
+                # Vérification supplémentaire
+                if donnees[colonne_date].isna().any():
+
+                    afficher_message(
+                        "Erreur : certaines dates n'ont pas pu "
+                        "être converties correctement."
                     )
 
-                    # Convertir les ventes en nombres
+                    st.stop()
+
+                # Convertir les ventes en nombres
+                try:
+
                     donnees[colonne_ventes] = pd.to_numeric(
                         donnees[colonne_ventes],
-                        errors="coerce"
+                        errors="raise"
                     )
 
-                    # Compter les dates invalides
-                    dates_invalides = donnees[
-                        colonne_date
-                    ].isna().sum()
+                except (
+                    ValueError,
+                    TypeError
+                ):
 
-                    # Compter les ventes invalides
-                    ventes_invalides = donnees[
-                        colonne_ventes
-                    ].isna().sum()
+                    afficher_message(
+                        "Erreur : la colonne des ventes contient "
+                        "des valeurs qui ne sont pas numériques."
+                    )
 
-                    # Signaler les dates invalides
-                    if dates_invalides > 0:
+                    st.stop()
 
-                        afficher_message(
-                            f"Le fichier contient {dates_invalides} "
-                            "date(s) invalide(s). "
-                            "Veuillez vérifier la colonne de date."
-                        )
+                # Vérifier une dernière fois les ventes négatives
+                if (
+                    donnees[colonne_ventes] < 0
+                ).any():
 
-                    # Signaler les ventes invalides
-                    if ventes_invalides > 0:
+                    afficher_message(
+                        "Erreur : les ventes ne peuvent pas "
+                        "être négatives."
+                    )
 
-                        afficher_message(
-                            f"Le fichier contient {ventes_invalides} "
-                            "valeur(s) de vente invalide(s). "
-                            "Veuillez vérifier la colonne des ventes."
-                        )
+                    st.stop()
 
-                    # Arrêter si les données contiennent des erreurs
-                    if (
-                        dates_invalides > 0
-                        or ventes_invalides > 0
+                # Trier les données de la plus ancienne
+                # à la plus récente
+                donnees = donnees.sort_values(
+                    colonne_date
+                )
+
+                # Vérifier qu'il existe suffisamment
+                # d'observations
+                if len(donnees) < 30:
+
+                    afficher_message(
+                        f"Erreur : le fichier contient seulement "
+                        f"{len(donnees)} observations. "
+                        "Au moins 30 observations de ventes "
+                        "sont nécessaires."
+                    )
+
+                    st.stop()
+
+                # Récupérer les 30 dernières ventes
+                historique = (
+                    donnees[colonne_ventes]
+                    .tail(30)
+                    .astype(float)
+                    .tolist()
+                )
+
+                # Déterminer la dernière date disponible
+                derniere_date = donnees[
+                    colonne_date
+                ].iloc[-1]
+
+                # Calculer automatiquement la date de prévision
+                # comme étant le lendemain de la dernière date
+                date_prevision = (
+                    derniere_date
+                    + pd.Timedelta(days=1)
+                ).date()
+
+                # Afficher les informations détectées
+                afficher_message(
+                    f"Dernière date disponible dans le fichier : "
+                    f"<strong>"
+                    f"{derniere_date.strftime('%d/%m/%Y')}"
+                    f"</strong><br>"
+                    f"Date de prévision : "
+                    f"<strong>"
+                    f"{date_prevision.strftime('%d/%m/%Y')}"
+                    f"</strong>"
+                )
+
+                # Informer l'utilisateur de l'historique utilisé
+                afficher_message(
+                    "Les 30 dernières observations du fichier "
+                    "seront utilisées pour effectuer la prévision."
+                )
+
+                # Bouton de prévision
+                if st.button(
+                    "Calculer la prévision",
+                    key="bouton_import"
+                ):
+
+                    # Vérifier l'historique
+                    if verifier_historique(
+                        historique
                     ):
 
-                        st.stop()
-
-                    # Vérifier les ventes négatives
-                    if (
-                        donnees[colonne_ventes] < 0
-                    ).any():
-
-                        afficher_message(
-                            "Le fichier contient des valeurs de ventes "
-                            "négatives. Les ventes doivent être supérieures "
-                            "ou égales à zéro."
+                        # Appeler l'API
+                        resultat = appeler_api(
+                            date_prevision,
+                            historique
                         )
 
-                        st.stop()
-
-                    # Trier les données de la plus ancienne
-                    # à la plus récente
-                    donnees = donnees.sort_values(
-                        colonne_date
-                    )
-
-                    # Vérifier qu'il existe suffisamment d'observations
-                    if len(donnees) < 30:
-
-                        afficher_message(
-                            f"Le fichier contient seulement "
-                            f"{len(donnees)} observations. "
-                            "Au moins 30 observations de ventes "
-                            "sont nécessaires."
+                        # Afficher le résultat
+                        afficher_resultat(
+                            resultat
                         )
 
-                    else:
+        except (
+            pd.errors.EmptyDataError,
+            pd.errors.ParserError
+        ):
 
-                        # Récupérer les 30 dernières ventes
-                        historique = (
-                            donnees[colonne_ventes]
-                            .tail(30)
-                            .astype(float)
-                            .tolist()
-                        )
-
-                        # Déterminer la dernière date disponible
-                        # dans le fichier
-                        derniere_date = donnees[
-                            colonne_date
-                        ].iloc[-1]
-
-                        # Calculer automatiquement la date de prévision
-                        # comme étant le lendemain de la dernière date
-                        date_prevision = (
-                            derniere_date
-                            + pd.Timedelta(days=1)
-                        ).date()
-
-                        # Afficher les informations détectées
-                        afficher_message(
-                            f"Dernière date disponible dans le fichier : "
-                            f"<strong>"
-                            f"{derniere_date.strftime('%d/%m/%Y')}"
-                            f"</strong><br>"
-                            f"Date de prévision : "
-                            f"<strong>"
-                            f"{date_prevision.strftime('%d/%m/%Y')}"
-                            f"</strong>"
-                        )
-
-                        # Informer l'utilisateur de l'historique utilisé
-                        afficher_message(
-                            "Les 30 dernières observations du fichier "
-                            "seront utilisées pour effectuer la prévision."
-                        )
-
-                        # Bouton de prévision
-                        if st.button(
-                            "Calculer la prévision",
-                            key="bouton_import"
-                        ):
-
-                            # Vérifier l'historique
-                            if verifier_historique(
-                                historique
-                            ):
-
-                                # Appeler l'API
-                                resultat = appeler_api(
-                                    date_prevision,
-                                    historique
-                                )
-
-                                # Afficher le résultat
-                                afficher_resultat(
-                                    resultat
-                                )
+            afficher_message(
+                "Erreur : impossible de lire correctement "
+                "le fichier. Vérifiez son contenu."
+            )
 
         except Exception as erreur:
 
-            # Gérer les erreurs de lecture du fichier
             afficher_message(
                 f"Impossible de lire le fichier : {erreur}"
             )
