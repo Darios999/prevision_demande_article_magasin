@@ -469,7 +469,7 @@ def afficher_resultat(resultat):
  <div class="resultat">
 
  <div class="resultat-titre">
- Résultat de la prévision
+📊 Résultat de la prévision
  </div>
 
 <div class="resultat-valeur">
@@ -477,7 +477,7 @@ def afficher_resultat(resultat):
 </div>
 
  <div class="resultat-date">
-                Demande prévue pour le {date_prevision}
+               📅 Demande prévue pour le {date_prevision}
  </div>
 
  </div>
